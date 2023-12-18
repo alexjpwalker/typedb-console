@@ -15,5 +15,14 @@
   ~ along with this program.  If not, see <https://www.gnu.org/licenses/>.
   -->
 <configuration debug="false">
-    <root level="OFF"/>
+    <appender name="Sentry" class="io.sentry.logback.SentryAppender">
+        <options>
+            <dsn>https://7f0ccb67b03abfccbacd7369d1f4ac6b@o4506315929812992.ingest.sentry.io/4506355433537536</dsn>
+        </options>
+        <minimumEventLevel>ERROR</minimumEventLevel>
+    </appender>
+
+    <root level="ERROR">
+        <appender-ref ref="Sentry" />
+    </root>
 </configuration>

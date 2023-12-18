@@ -20,6 +20,8 @@ artifacts = [
   "info.picocli:picocli",
   "io.grpc:grpc-core",
   "io.grpc:grpc-api",
+  "io.sentry:sentry",
+  "io.sentry:sentry-logback",
   "org.jline:jline",
   "org.jline:jline-terminal-jansi",
   "org.hamcrest:hamcrest-library",

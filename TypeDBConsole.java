@@ -48,6 +48,9 @@ import com.vaticle.typeql.lang.query.TypeQLGet;
 import com.vaticle.typeql.lang.query.TypeQLQuery;
 import com.vaticle.typeql.lang.query.TypeQLUndefine;
 import com.vaticle.typeql.lang.query.TypeQLUpdate;
+import io.sentry.ITransaction;
+import io.sentry.Sentry;
+import io.sentry.SpanStatus;
 import org.jline.builtins.Completers;
 import org.jline.reader.Candidate;
 import org.jline.reader.Completer;
@@ -64,14 +67,19 @@ import picocli.CommandLine;
 
 import javax.annotation.Nullable;
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
@@ -83,6 +91,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import java.util.logging.Level;
 import java.util.stream.Stream;
 
 import static com.vaticle.typedb.common.collection.Collections.set;
@@ -103,6 +112,7 @@ public class TypeDBConsole {
 
     private static final Duration PASSWORD_EXPIRY_WARN = Duration.ofDays(7);
     private static final int ONE_HOUR_IN_MILLIS = 60 * 60 * 1000;
+    private static final String SENTRY_SERVICE_ADDRESS = "https://7f0ccb67b03abfccbacd7369d1f4ac6b@o4506315929812992.ingest.sentry.io/4506355433537536";
 
     private final Printer printer;
     private ExecutorService executorService;
@@ -122,6 +132,7 @@ public class TypeDBConsole {
 
     public static void main(String[] args) {
         configureAndVerifyJavaVersion();
+        configureLogging();
         CLIOptions options = parseCLIOptions(args);
         TypeDBConsole console = new TypeDBConsole(new Printer(System.out, System.err));
         if (options.script() == null && options.commands() == null) {
@@ -141,6 +152,26 @@ public class TypeDBConsole {
             LOG.warn("Could not detect Java version from version string '{}'. Will start TypeDB Server anyway.", System.getProperty("java.version"));
         } else if (majorVersion < 11) {
             throw TypeDBConsoleException.of(INCOMPATIBLE_JAVA_RUNTIME, majorVersion);
+        }
+    }
+
+    protected static void configureLogging() {
+        Sentry.init(options -> {
+            options.setDsn(SENTRY_SERVICE_ADDRESS);
+            options.setTracesSampleRate(1.0);
+            options.setSendDefaultPii(false);
+        });
+        io.sentry.protocol.User user = new io.sentry.protocol.User();
+        user.setUsername(sentryInstanceId());
+        Sentry.setUser(user);
+    }
+
+    private static String sentryInstanceId() {
+        try {
+            byte[] mac = NetworkInterface.getByInetAddress(InetAddress.getLocalHost()).getHardwareAddress();
+            return Base64.getEncoder().encodeToString(MessageDigest.getInstance("SHA-256").digest(mac));
+        } catch (NoSuchAlgorithmException | IOException e) {
+            return "";
         }
     }
 
@@ -171,6 +202,7 @@ public class TypeDBConsole {
     private void runREPLMode(CLIOptions options) {
         printer.info(COPYRIGHT);
         boolean isEnterprise = options.enterprise() != null;
+        ITransaction tx = Sentry.startTransaction("repl_session", "open");
         try (TypeDBDriver driver = createTypeDBDriver(options)) {
             LineReader reader = LineReaderBuilder.builder()
                     .terminal(terminal)
@@ -242,7 +274,10 @@ public class TypeDBConsole {
             }
         } catch (TypeDBDriverException e) {
             printer.error(e.getMessage());
+            tx.setThrowable(e);
+            tx.setStatus(SpanStatus.INTERNAL_ERROR);
         } finally {
+            tx.finish();
             executorService.shutdownNow();
         }
     }

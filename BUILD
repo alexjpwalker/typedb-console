@@ -56,6 +56,8 @@ java_library(
         "@maven//:com_google_code_findbugs_jsr305",
         "@maven//:io_grpc_grpc_core",
         "@maven//:io_grpc_grpc_api",
+        "@maven//:io_sentry_sentry",
+        "@maven//:io_sentry_sentry_logback",
         "@maven//:org_jline_jline",
         "@maven//:org_jline_jline_terminal_jansi",
         "@maven//:info_picocli_picocli",
